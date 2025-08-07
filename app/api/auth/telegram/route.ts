@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
           firstName: telegramUser.first_name,
           lastName: telegramUser.last_name,
           fullName: `${telegramUser.first_name} ${telegramUser.last_name || ''}`.trim(),
-          age: 18, // Default age, will be updated during onboarding
+          age: 25, // Default age for new users
           gender: 'MALE', // Default gender, will be updated during onboarding
-          bio: '', // Empty bio, will be updated during onboarding
+          bio: 'New user looking to meet amazing people!', // Default bio
         },
         include: { photos: true }
       })

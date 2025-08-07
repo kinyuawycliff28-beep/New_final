@@ -15,9 +15,14 @@ export const uploadImage = async (file: File): Promise<{ publicId: string; secur
       {
         resource_type: 'image',
         folder: 'dating-app',
+        transformation: [
+          { width: 800, height: 1000, crop: 'fill', quality: 'auto' },
+          { fetch_format: 'auto' }
+        ]
       },
       (error, result) => {
         if (error) {
+          console.error('Cloudinary upload error:', error)
           reject(error)
         } else {
           resolve({

@@ -16,6 +16,12 @@ export function validateTelegramAuth(initData: string): TelegramUser | null {
   
   if (!hash) return null
 
+  // For development, allow mock hash
+  if (hash === 'mock_hash_for_dev' && process.env.NODE_ENV === 'development') {
+    const user = JSON.parse(urlParams.get('user') || '{}')
+    return user
+  }
+
   urlParams.delete('hash')
   
   const dataCheckString = Array.from(urlParams.entries())
