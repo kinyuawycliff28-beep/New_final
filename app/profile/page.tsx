@@ -3,14 +3,18 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { Edit, Plus } from 'lucide-react'
+import { Edit, Settings, Heart, MessageCircle, MapPin, Calendar, User, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BottomNav } from '@/components/bottom-nav'
-import { UploadImage } from '@/components/upload-image'
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
+  const [stats, setStats] = useState({
+    matches: 0,
+    likes: 0,
+    messages: 0
+  })
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -23,26 +27,34 @@ export default function ProfilePage() {
     
     const parsedUser = JSON.parse(userData)
     setUser(parsedUser)
-    setIsLoading(false)
+    fetchUserStats(parsedUser.id)
   }, [router])
 
-  const handlePhotoUpload = async (file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('userId', user.id)
-    formData.append('isMain', 'false')
-
-    const response = await fetch('/api/user/upload-photo', {
-      method: 'POST',
-      body: formData,
-    })
-
-    if (response.ok) {
-      // Refresh user data
-      window.location.reload()
-    } else {
-      throw new Error('Upload failed')
+  const fetchUserStats = async (userId: string) => {
+    try {
+      // Fetch matches
+      const matchesResponse = await fetch(`/api/matches?userId=${userId}`)
+      const matchesData = await matchesResponse.json()
+      
+      // Fetch likes sent
+      const likesResponse = await fetch(`/api/user/stats?userId=${userId}`)
+      const likesData = await likesResponse.json()
+      
+      setStats({
+        matches: matchesData.matches?.length || 0,
+        likes: likesData.likes || 0,
+        messages: likesData.messages || 0
+      })
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  const handleSignOut = () => {
+    localStorage.removeItem('user')
+    router.push('/')
   }
 
   if (isLoading) {
@@ -56,9 +68,15 @@ export default function ProfilePage() {
     )
   }
 
+  if (!user) return null
+
+  const mainPhoto = user.photos?.find((p: any) => p.isMain)?.secureUrl
+  const additionalPhotos = user.photos?.filter((p: any) => !p.isMain) || []
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <div className="container mx-auto px-4 py-8">
+        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold">My Profile</h1>
           <Button
@@ -72,73 +90,133 @@ export default function ProfilePage() {
         </div>
 
         <div className="space-y-6">
-          {/* Profile Info */}
+          {/* Profile Header */}
           <Card>
-            <CardHeader>
-              <CardTitle>Profile Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center space-x-4">
-                <Image
-                  src={user.photos?.find((p: any) => p.isMain)?.secureUrl || '/placeholder.svg?height=80&width=80&query=profile'}
-                  alt={user.fullName}
-                  width={80}
-                  height={80}
-                  className="rounded-full object-cover"
-                />
-                <div>
-                  <h3 className="text-xl font-semibold">{user.fullName}</h3>
-                  <p className="text-gray-600">{user.age} years old</p>
-                  <p className="text-gray-600 capitalize">{user.gender.toLowerCase()}</p>
+            <CardContent className="p-6">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="relative">
+                  <Image
+                    src={mainPhoto || '/placeholder.svg?height=100&width=100&query=profile'}
+                    alt={user.fullName}
+                    width={100}
+                    height={100}
+                    className="rounded-full object-cover"
+                  />
+                  {user.username && (
+                    <div className="absolute -bottom-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+                      @{user.username}
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold">{user.fullName}</h2>
+                  <div className="flex items-center text-gray-600 mt-1">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    <span>{user.age} years old</span>
+                  </div>
+                  <div className="flex items-center text-gray-600 mt-1">
+                    <User className="w-4 h-4 mr-1" />
+                    <span className="capitalize">{user.gender?.toLowerCase()}</span>
+                  </div>
+                  {user.latitude && user.longitude && (
+                    <div className="flex items-center text-gray-600 mt-1">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      <span>Location enabled</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
-              <div>
-                <h4 className="font-medium mb-2">Bio</h4>
-                <p className="text-gray-700">{user.bio}</p>
+              <div className="mb-4">
+                <h3 className="font-semibold mb-2">About Me</h3>
+                <p className="text-gray-700 leading-relaxed">
+                  {user.bio || 'No bio added yet. Edit your profile to add one!'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Activity Stats</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center">
+                    <Heart className="w-6 h-6 text-pink-500" />
+                  </div>
+                  <div className="text-2xl font-bold text-pink-600">{stats.matches}</div>
+                  <div className="text-sm text-gray-600">Matches</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center">
+                    <Heart className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div className="text-2xl font-bold text-red-600">{stats.likes}</div>
+                  <div className="text-sm text-gray-600">Likes Sent</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center">
+                    <MessageCircle className="w-6 h-6 text-blue-500" />
+                  </div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.messages}</div>
+                  <div className="text-sm text-gray-600">Messages</div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Photos */}
+          {additionalPhotos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>My Photos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  {additionalPhotos.map((photo: any, index: number) => (
+                    <div key={photo.id} className="relative">
+                      <Image
+                        src={photo.secureUrl || "/placeholder.svg"}
+                        alt={`Photo ${index + 1}`}
+                        width={200}
+                        height={200}
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Account Info */}
           <Card>
             <CardHeader>
-              <CardTitle>Photos</CardTitle>
+              <CardTitle>Account Information</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                {user.photos?.map((photo: any, index: number) => (
-                  <div key={photo.id} className="relative">
-                    <Image
-                      src={photo.secureUrl || "/placeholder.svg"}
-                      alt={`Photo ${index + 1}`}
-                      width={200}
-                      height={200}
-                      className="w-full h-32 object-cover rounded-lg"
-                    />
-                    {photo.isMain && (
-                      <div className="absolute top-2 left-2 bg-pink-500 text-white text-xs px-2 py-1 rounded">
-                        Main
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Add more photos */}
-                {(!user.photos || user.photos.length < 3) && (
-                  <UploadImage
-                    onUpload={handlePhotoUpload}
-                    className="h-32"
-                  />
-                )}
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Telegram ID</span>
+                <span className="font-mono text-sm">{user.telegramId}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Member since</span>
+                <span>{new Date(user.createdAt).toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Profile completed</span>
+                <span className="text-green-600">✓ Complete</span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Settings */}
+          {/* Actions */}
           <Card>
             <CardHeader>
-              <CardTitle>Settings</CardTitle>
+              <CardTitle>Account Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Button
@@ -146,16 +224,23 @@ export default function ProfilePage() {
                 className="w-full justify-start"
                 onClick={() => router.push('/profile/edit')}
               >
+                <Edit className="w-4 h-4 mr-2" />
                 Edit Profile
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start text-red-600 hover:text-red-700"
-                onClick={() => {
-                  localStorage.removeItem('user')
-                  router.push('/')
-                }}
+                className="w-full justify-start"
+                onClick={() => router.push('/settings')}
               >
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={handleSignOut}
+              >
+                <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
               </Button>
             </CardContent>

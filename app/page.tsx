@@ -3,10 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 declare global {
   interface Window {
@@ -15,6 +12,7 @@ declare global {
         initDataUnsafe?: any
         initData?: string
         ready?: () => void
+        expand?: () => void
       }
     }
   }
@@ -22,20 +20,21 @@ declare global {
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
-  const [testResults, setTestResults] = useState<any>(null)
-  const [manualData, setManualData] = useState({
-    id: '',
-    first_name: '',
-    last_name: '',
-    username: '',
-    photo_url: ''
-  })
+  const [telegramData, setTelegramData] = useState<any>(null)
   const router = useRouter()
 
   useEffect(() => {
     // Initialize Telegram WebApp
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready?.()
+      window.Telegram.WebApp.expand?.()
+      
+      const initData = window.Telegram.WebApp.initData
+      const user = window.Telegram.WebApp.initDataUnsafe?.user
+      
+      if (user) {
+        setTelegramData({ initData, user })
+      }
     }
   }, [])
 
@@ -43,16 +42,17 @@ export default function HomePage() {
     setIsLoading(true)
     
     try {
-      // Try to get Telegram data first
-      let initData = window.Telegram?.WebApp?.initData || ''
-      let telegramUser = window.Telegram?.WebApp?.initDataUnsafe?.user
-      
-      console.log('Telegram data:', { initData, telegramUser })
+      if (!telegramData?.initData) {
+        throw new Error('No Telegram data available. Please open this app through Telegram.')
+      }
 
       const response = await fetch('/api/auth/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData })
+        body: JSON.stringify({ 
+          initData: telegramData.initData,
+          user: telegramData.user 
+        })
       })
 
       const data = await response.json()
@@ -61,106 +61,17 @@ export default function HomePage() {
         localStorage.setItem('user', JSON.stringify(data.user))
         
         // Check if user needs onboarding
-        if (!data.user.bio || data.user.bio === 'New user looking to meet amazing people!' || data.user.age === 25) {
+        if (data.isNewUser || !data.user.bio || data.user.age === 25) {
           router.push('/onboard')
         } else {
           router.push('/discover')
         }
       } else {
-        console.error('Authentication failed:', data.error)
-        alert('Authentication failed: ' + data.error)
+        throw new Error(data.error || 'Authentication failed')
       }
     } catch (error) {
       console.error('Auth error:', error)
-      alert('Authentication failed')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleManualAuth = async () => {
-    setIsLoading(true)
-    
-    try {
-      if (!manualData.first_name) {
-        alert('Please enter at least your first name')
-        return
-      }
-
-      const response = await fetch('/api/auth/telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          initData: null,
-          manualData: {
-            ...manualData,
-            id: manualData.id || Math.floor(Math.random() * 1000000).toString()
-          }
-        })
-      })
-
-      const data = await response.json()
-      
-      if (response.ok) {
-        localStorage.setItem('user', JSON.stringify(data.user))
-        router.push('/onboard')
-      } else {
-        console.error('Authentication failed:', data.error)
-        alert('Authentication failed: ' + data.error)
-      }
-    } catch (error) {
-      console.error('Auth error:', error)
-      alert('Authentication failed')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleSeedDatabase = async () => {
-    setIsLoading(true)
-    
-    try {
-      const response = await fetch('/api/seed', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      const data = await response.json()
-      
-      if (response.ok) {
-        alert(`Database seeded successfully! Created ${data.users} users and ${data.matches} matches.`)
-      } else {
-        alert('Failed to seed database: ' + data.error)
-      }
-    } catch (error) {
-      console.error('Seed error:', error)
-      alert('Failed to seed database')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const testConnections = async () => {
-    setIsLoading(true)
-    
-    try {
-      // Test database
-      const dbResponse = await fetch('/api/test-db')
-      const dbData = await dbResponse.json()
-      
-      // Test Cloudinary
-      const cloudinaryResponse = await fetch('/api/test-cloudinary')
-      const cloudinaryData = await cloudinaryResponse.json()
-      
-      setTestResults({
-        database: dbData,
-        cloudinary: cloudinaryData
-      })
-    } catch (error) {
-      console.error('Test error:', error)
-      setTestResults({
-        error: 'Failed to test connections'
-      })
+      alert(error instanceof Error ? error.message : 'Authentication failed')
     } finally {
       setIsLoading(false)
     }
@@ -173,133 +84,50 @@ export default function HomePage() {
           <CardTitle className="text-3xl font-bold text-pink-600 mb-2">
             💕 TeleDate
           </CardTitle>
-          <p className="text-gray-600">Find your perfect match</p>
+          <p className="text-gray-600">Find your perfect match through Telegram</p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs defaultValue="auto" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="auto">Auto Login</TabsTrigger>
-              <TabsTrigger value="manual">Manual Entry</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="auto" className="space-y-4">
+        <CardContent className="space-y-6">
+          {telegramData?.user ? (
+            <div className="text-center space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-green-800 font-medium">
+                  Welcome, {telegramData.user.first_name}!
+                </p>
+                <p className="text-green-600 text-sm">
+                  Telegram authentication detected
+                </p>
+              </div>
+              
               <Button
                 onClick={handleTelegramAuth}
                 disabled={isLoading}
                 className="w-full bg-pink-500 hover:bg-pink-600"
                 size="lg"
               >
-                {isLoading ? 'Authenticating...' : 'Continue with Telegram'}
+                {isLoading ? 'Authenticating...' : 'Continue to App'}
               </Button>
-              <p className="text-xs text-gray-500 text-center">
-                This will try to detect Telegram data automatically
-              </p>
-            </TabsContent>
-            
-            <TabsContent value="manual" className="space-y-4">
-              <div className="space-y-3">
-                <div>
-                  <Label htmlFor="first_name">First Name *</Label>
-                  <Input
-                    id="first_name"
-                    value={manualData.first_name}
-                    onChange={(e) => setManualData(prev => ({ ...prev, first_name: e.target.value }))}
-                    placeholder="Enter your first name"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="last_name">Last Name</Label>
-                  <Input
-                    id="last_name"
-                    value={manualData.last_name}
-                    onChange={(e) => setManualData(prev => ({ ...prev, last_name: e.target.value }))}
-                    placeholder="Enter your last name"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="username">Username</Label>
-                  <Input
-                    id="username"
-                    value={manualData.username}
-                    onChange={(e) => setManualData(prev => ({ ...prev, username: e.target.value }))}
-                    placeholder="@username (optional)"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="telegram_id">Telegram ID</Label>
-                  <Input
-                    id="telegram_id"
-                    value={manualData.id}
-                    onChange={(e) => setManualData(prev => ({ ...prev, id: e.target.value }))}
-                    placeholder="Your Telegram ID (optional)"
-                  />
-                </div>
+            </div>
+          ) : (
+            <div className="text-center space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800 font-medium">
+                  Telegram Required
+                </p>
+                <p className="text-blue-600 text-sm">
+                  This app must be opened through Telegram
+                </p>
               </div>
               
-              <Button
-                onClick={handleManualAuth}
-                disabled={isLoading || !manualData.first_name}
-                className="w-full bg-blue-500 hover:bg-blue-600"
-                size="lg"
-              >
-                {isLoading ? 'Creating Account...' : 'Create Account'}
-              </Button>
-              
-              <p className="text-xs text-gray-500 text-center">
-                Enter your details manually to get started
-              </p>
-            </TabsContent>
-          </Tabs>
-          
-          {/* Development tools */}
-          <div className="border-t pt-4 space-y-2">
-            <p className="text-xs text-gray-500 text-center">Development Tools</p>
-            
-            <Button
-              onClick={testConnections}
-              disabled={isLoading}
-              variant="outline"
-              className="w-full"
-              size="sm"
-            >
-              🔧 Test Database & Cloudinary
-            </Button>
-            
-            <Button
-              onClick={handleSeedDatabase}
-              disabled={isLoading}
-              variant="outline"
-              className="w-full"
-              size="sm"
-            >
-              🌱 Seed Database with Mock Data
-            </Button>
-            
-            {testResults && (
-              <div className="text-xs bg-gray-100 p-2 rounded mt-2">
-                <div className="mb-1">
-                  <strong>Database:</strong> {testResults.database?.success ? '✅ Connected' : '❌ Failed'}
-                  {testResults.database?.stats && (
-                    <div className="text-gray-600">
-                      Users: {testResults.database.stats.users}, 
-                      Photos: {testResults.database.stats.photos}, 
-                      Matches: {testResults.database.stats.matches}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <strong>Cloudinary:</strong> {testResults.cloudinary?.success ? '✅ Connected' : '❌ Failed'}
-                  {testResults.cloudinary?.cloudName && (
-                    <div className="text-gray-600">Cloud: {testResults.cloudinary.cloudName}</div>
-                  )}
-                </div>
+              <div className="text-xs text-gray-500 space-y-2">
+                <p>To use this app:</p>
+                <ol className="list-decimal list-inside space-y-1 text-left">
+                  <li>Open Telegram</li>
+                  <li>Find @YourBotName</li>
+                  <li>Click "Open Web App"</li>
+                </ol>
               </div>
-            )}
-          </div>
+            </div>
+          )}
           
           <p className="text-xs text-gray-500 text-center">
             By continuing, you agree to our Terms of Service and Privacy Policy
