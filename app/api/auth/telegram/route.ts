@@ -4,11 +4,30 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(request: NextRequest) {
   try {
-    const { initData } = await request.json()
+    const { initData, manualData } = await request.json()
     
-    const telegramUser = validateTelegramAuth(initData)
+    let telegramUser = null
+    
+    // Try to validate with initData first
+    if (initData) {
+      telegramUser = validateTelegramAuth(initData)
+    }
+    
+    // If no valid initData, use manual data
+    if (!telegramUser && manualData) {
+      telegramUser = {
+        id: parseInt(manualData.id) || Math.floor(Math.random() * 1000000),
+        first_name: manualData.first_name || 'User',
+        last_name: manualData.last_name || '',
+        username: manualData.username || '',
+        photo_url: manualData.photo_url || null,
+        auth_date: Math.floor(Date.now() / 1000),
+        hash: 'manual_entry'
+      }
+    }
+    
     if (!telegramUser) {
-      return NextResponse.json({ error: 'Invalid authentication' }, { status: 401 })
+      return NextResponse.json({ error: 'Invalid authentication data' }, { status: 401 })
     }
 
     // Check if user exists

@@ -13,7 +13,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing file or userId' }, { status: 400 })
     }
 
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'File must be an image' }, { status: 400 })
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 })
+    }
+
+    console.log('Uploading image to Cloudinary...', { fileName: file.name, fileSize: file.size })
+
     const { publicId, secureUrl } = await uploadImage(file)
+
+    console.log('Image uploaded successfully:', { publicId, secureUrl })
 
     // If this is the main photo, update existing main photo
     if (isMain) {
@@ -35,6 +49,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ photo })
   } catch (error) {
     console.error('Upload error:', error)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Upload failed', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
